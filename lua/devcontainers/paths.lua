@@ -129,7 +129,7 @@ local function make_path_mappers(workspace_dir)
                     ensure_docker_handlers_loaded()
                     return docker.uri_from_container_name(info.container_name, vim.fs.abspath(path))
                 end
-            elseif scheme == 'docker' then
+            elseif scheme == 'docker' or scheme == 'podman' then
                 if dir == 'server2client' then
                     -- We don't expect paths from within a container
                     log.warn('Server sent URI with "%s" scheme: %s', docker_cmd, uri)
@@ -137,7 +137,7 @@ local function make_path_mappers(workspace_dir)
                     -- Sending buffer to the server - translate to the in-container path
                     local container, path = docker.parse_uri(uri)
                     if not container then
-                        log.warn('Could not parse docker URI: %s', uri)
+                        log.warn('Could not parse container URI: %s', uri)
                     elseif container ~= info.container_name then
                         log.warn('Sending docker path with container "%s" to server in container "%s"', container, info.container_name)
                     else
@@ -184,7 +184,6 @@ function M.setup(config, cmd, workspace_dir)
         if not mapper then
             log.exception('Invalid direction: %s', ctx.direction)
         end
-        log.notify.warn('map_uri(mapper, %s, %s)', ctx, value)
         return map_uri(mapper, ctx, value)
     end)
 

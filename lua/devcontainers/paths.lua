@@ -5,6 +5,7 @@ local rpc = require('devcontainers.lsp.rpc')
 local log = require('devcontainers.log').paths
 local cache = require('devcontainers.cache')
 local docker = require('devcontainers.docker')
+local docker_cmd = require('devcontainers.config').docker_cmd
 
 local augroup = vim.api.nvim_create_augroup('devcontainers.paths', { clear = true })
 
@@ -70,12 +71,19 @@ local ensure_docker_handlers_loaded = utils.lazy(function()
     end
 
     -- check for theoretical other plugins that could handle this
-    local autocmds = vim.api.nvim_get_autocmds { event = 'BufReadCmd', pattern = 'docker://*' }
+    local autocmds = vim.api.nvim_get_autocmds {
+        event = 'BufReadCmd',
+        pattern = string.format('%s://*', docker_cmd),
+    }
     if next(autocmds) then
         return false
     end
-
-    log.notify.warn('No handlers for "docker://" buffers: install netman.nvim or similar plugin')
+    log.notify.warn(
+        string.format(
+            'No handlers for \"%s://\" buffers: install netman.nvim or similar plugin',
+            docker_cmd
+        )
+    )
     return true
 end)
 
@@ -121,15 +129,15 @@ local function make_path_mappers(workspace_dir)
                     ensure_docker_handlers_loaded()
                     return docker.uri_from_container_name(info.container_name, vim.fs.abspath(path))
                 end
-            elseif scheme == 'docker' then
+            elseif scheme == 'docker' or scheme == 'podman' then
                 if dir == 'server2client' then
-                    -- We don't expect docker:// paths from within a docker container
-                    log.warn('Server sent URI with "docker" scheme: %s', uri)
+                    -- We don't expect paths from within a container
+                    log.warn('Server sent URI with "%s" scheme: %s', docker_cmd, uri)
                 else -- client2server
-                    -- Sending docker:// buffer to the server - translate to the in-container path
+                    -- Sending buffer to the server - translate to the in-container path
                     local container, path = docker.parse_uri(uri)
                     if not container then
-                        log.warn('Could not parse docker URI: %s', uri)
+                        log.warn('Could not parse container URI: %s', uri)
                     elseif container ~= info.container_name then
                         log.warn('Sending docker path with container "%s" to server in container "%s"', container, info.container_name)
                     else
@@ -182,9 +190,9 @@ function M.setup(config, cmd, workspace_dir)
     local info = cache.get(workspace_dir)
 
     vim.api.nvim_create_autocmd('BufAdd', {
-        desc = 'Attach LSP client to docker:// buffer',
+        desc = 'Attach LSP client to container buffer',
         group = augroup,
-        pattern = string.format('docker:/%s*', info.container_name),
+        pattern = string.format('%s:/%s*', docker_cmd, info.container_name),
         callback = function(o)
             local client = get_lsp_client_by_config(config, workspace_dir)
             if client then

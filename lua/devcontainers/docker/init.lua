@@ -37,10 +37,10 @@ function M.uri_from_container_name(container_name, abspath)
         log.warn('Container name does not start with "/" (adding): %s', container_name)
         container_name = '/' .. container_name
     end
-    return string.format('docker:/%s%s', container_name, abspath)
+    return string.format('%s:/%s%s', config.docker_cmd, container_name, abspath)
 end
 
-local DOCKER_URI_PATTERN = '^docker:/(/[^/]*)(/.*)'
+local DOCKER_URI_PATTERN = string.format('^%s:/(/[^/]*)(/.*)', config.docker_cmd)
 
 ---@param uri string
 ---@return string? container

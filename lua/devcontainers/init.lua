@@ -203,4 +203,73 @@ function M.lsp_cmd(cmd, opts)
     end, opts)
 end
 
+
+--@param cmd string
+--@param args string[]
+--@param options table
+--@return fun
+function M.dap_cmd(cmd, args, options)
+    local log = require('devcontainers.log')
+    local cli = require('devcontainers.cli')
+    local manager = require('devcontainers.manager')
+    local dap_map = require('devcontainers.dap')
+
+    options = options or {}
+    local root_dir = vim.fn.getcwd()
+    return function(cb, config)
+        if config.request == 'attach' then
+            ---@diagnostic disable-next-line: undefined-field
+            local port = (config.connect or config).port
+            ---@diagnostic disable-next-line: undefined-field
+            local host = (config.connect or config).host or '127.0.0.1'
+
+            if manager.is_workspace_dir(root_dir) then
+                dap_map.ensure_listeners()
+                config._devcontainers = vim.tbl_extend('force', config._devcontainers or {}, {
+                    workspace_dir = root_dir,
+                })
+            end
+
+            cb({
+                type = 'server',
+                port = port,
+                host = host,
+                options = options,
+            })
+        else
+            if manager.is_workspace_dir(root_dir) then
+                local success = manager.ensure_up(root_dir)
+                if not success then
+                    log.error('Could not start devcontainer for %s in %s', config.name, root_dir)
+                    return
+                end
+
+                dap_map.ensure_listeners()
+                config._devcontainers = vim.tbl_extend('force', config._devcontainers or {}, {
+                    workspace_dir = root_dir,
+                })
+
+                local final_cmd = cli.cmd(root_dir, 'exec', cmd, unpack(args))
+                options._devcontainers = {}
+                options._devcontainers.original_cmd = cmd
+                options._devcontainers.cmd = final_cmd
+                cb({
+                    type = 'executable',
+                    command = final_cmd[1],
+                    args = { unpack(final_cmd, 2) },
+                    options = options,
+                })
+            else
+                cb({
+                    type = 'executable',
+                    command = cmd,
+                    args = args,
+                    options = options,
+                })
+            end
+        end
+    end
+end
+
+
 return M
